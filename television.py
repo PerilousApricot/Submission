@@ -252,7 +252,7 @@ class Overview:
                     #statusnumbers['REALLY-RUNNING'], 
                     #statusnumbers['ABORTED'], 
                     statusnumbers['ERROR']+statusnumbers['FAILED']+statusnumbers['DONE-FAILED'], 
-                    statusnumbers['Done OK']+statusnumbers['COMPLETED']+statusnumbers['DONE-OK'], 
+                    statusnumbers['COMPLETED']+statusnumbers['DONE-OK'], 
                     statusnumbers['good'], 
                     statusnumbers[None]+statusnumbers["None"], 
                     task.run_time()]
