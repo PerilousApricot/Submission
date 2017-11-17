@@ -35,6 +35,8 @@ def main():
                              help = 'If this option is specifed, the folders will be cleand up. [default = %default]' )
     parser.add_option( '-k', '--keep',metavar= 'keep', default = "METParked",
                              help = 'Folders with this name will be kept  [default = %default]' )
+    parser.add_option( '--veto',metavar= 'veto', default = None,
+                             help = 'Veto a specific sample e.g. Tau_Run20  [default = %default]' )
     ( options, args ) = parser.parse_args()
 
     format = '%(levelname)s %(name)s (%(asctime)s): %(message)s'
@@ -108,6 +110,9 @@ def megeRootFiles(options):
     if not os.path.exists(outputFolder):
         os.makedirs(outputFolder)
     for sample in glob.glob(options.inputFolder+"/*"):
+        if options.veto is not None:
+            if options.veto in sample:
+                continue
         samplelist=glob.glob(sample+"/*.root")
         for s in range(len(samplelist)):
             samplelist[s]=samplelist[s].replace("/eos/uscms//","root://cmseos.fnal.gov//")
@@ -120,7 +125,7 @@ def megeRootFiles(options):
     log.info("Now merging files:")
     if len(listOfSamples)>0:
         #now merge all samples
-        pool = multiprocessing.Pool(40)
+        pool = multiprocessing.Pool(10)
         pool.map_async(hadd, listOfSamples)
         while True:
             time.sleep(5)
@@ -137,7 +142,7 @@ def megeRootFiles(options):
         shutil.move(outputFolder+"/"+"%s.root"%(os.path.basename(dataSample)),outputFolder+"/"+"Data_%s.root"%(os.path.basename(dataSample)))
     if hasData:
         all_merged_data_files=[outputFolder+"/"+"Data_%s.root "%(os.path.basename(dataSample))  for dataSample in dataSamples]
-        command= "hadd -f9 "+outputFolder+"/"+"allData.root "+" ".join(all_merged_data_files)
+        command= "hadd -fk -O "+outputFolder+"/"+"allData.root "+" ".join(all_merged_data_files)
         print(command)
         p = subprocess.Popen(command,shell=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
         out, err = p.communicate()
@@ -161,7 +166,7 @@ def hadd(item):
         elif len(samplelist)==0:
             calling='echo "Error no File for %s"'%(sample)
         else:
-            calling="hadd -f9 "+outputname+" "+" ".join(samplelist)
+            calling="hadd -fk -O "+outputname+" "+" ".join(samplelist)
         #print(calling)
         p = subprocess.Popen(calling,shell=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT )
         out, err = p.communicate()

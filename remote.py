@@ -6,6 +6,7 @@ from datetime import datetime
 import optparse,os,time,pickle,subprocess,shutil,sys,getpass,re
 import logging
 import ROOT
+from condor_submit import checkAndRenewVomsProxy
 log = logging.getLogger( 'remote' )
 
 
@@ -222,6 +223,13 @@ def main():
     if len( args ) != 1:
         parser.error( 'Exactly one CONFIG_FILE required!' )
     options.outputFolder=options.outputFolder.replace("REPLACEBYTAG",options.Tag)
+    
+    print("You may enter your grid password here. Do not enter anything to use the available proxy.")
+    passphrase = getpass.getpass()
+    if passphrase=="":
+        passphrase = None
+    else:
+        checkAndRenewVomsProxy(passphrase=passphrase)
 
 
 
