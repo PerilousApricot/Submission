@@ -196,13 +196,28 @@ class Overview:
         self.update(tasks, resubmitList, killList, nextTaskId)
         self.tasks = tasks
     def update(self, tasks, resubmitList, killList, nextTaskId):
-        if (nextTaskId) % len(tasks) ==0:
+        logging.info(len(tasks))
+        if (nextTaskId) % len(tasks) ==0 and nextTaskId!=len(tasks):
             command="condor_q %s"%(getpass.getuser())
             proc = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
             self.jobstati = proc.stdout.read()
             self.tasks = tasks
-            for task in self.tasks:
+            for i,task in enumerate(self.tasks):
                 task.status(self.jobstati)
+            #parameters = [tasks[nextTaskId], resubmitList[nextTaskId], killList[nextTaskId]]
+                killJobs=killList[i]
+                resubmitJobs=resubmitList[i]
+                if len(killJobs) > 0:
+                    task.kill(killJobs)
+                    task.status(self.jobstati)
+                if len(resubmitJobs) > 0:
+                    task.resubmit(resubmitJobs)
+                    task.status(self.jobstati)
+            resubmitList, killList = [], []
+            for task in tasks:
+                resubmitList.append(set())
+                killList.append(set())
+            
         else:
             return
         #parameters = [tasks[nextTaskId], resubmitList[nextTaskId], killList[nextTaskId]]
@@ -362,17 +377,17 @@ class Overview:
 
 def main(stdscr, options, taskList, passphrase):
     # Logging
-    #logger = logging.getLogger()
-    #logger.setLevel(logging._levelNames[options.debug.upper()])
-    #logQueue = multiprocessing.Queue()
-    #logText = curseshelpers.BottomText(stdscr, stdscr.getmaxyx()[0]-5)
-    #handler = curseshelpers.CursesMultiHandler(stdscr, logText, logQueue, level=logging._levelNames[options.debug.upper()])
-    #fileHandler = logging.FileHandler("television.log")
-    #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    #handler.setFormatter(formatter)
-    #fileHandler.setFormatter(formatter)
-    #logging.addHandler(handler)
-    #logger.addHandler(fileHandler)
+    logger = logging.getLogger()
+    logger.setLevel(logging._levelNames[options.debug.upper()])
+    logQueue = multiprocessing.Queue()
+    logText = curseshelpers.BottomText(stdscr, stdscr.getmaxyx()[0]-5)
+    handler = curseshelpers.CursesMultiHandler(stdscr, logText, logQueue, level=logging._levelNames[options.debug.upper()])
+    fileHandler = logging.FileHandler("television.log")
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    fileHandler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.addHandler(fileHandler)
 
     # catch sigterm to terminate gracefully
     signal.signal(signal.SIGTERM, terminate)
@@ -530,14 +545,14 @@ def getTasks(sample_list,run_folder):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format='%(levelname)s:%(message)s',filename='log.log',level=logging.DEBUG)
+    #logging.basicConfig(format='%(levelname)s:%(message)s',filename='log.log',level=logging.DEBUG)
     parser = optparse.OptionParser( description='Monitor for condor tasks', usage='usage: %prog directories')
     parser.add_option("--debug", action="store", dest="debug", help="Debug level (DEBUG, INFO, WARNING, ERROR, CRITICAL)", default="WARNING")
     parser.add_option("-p", "--proxy", action="store_true", dest="proxy", help="Do not ask for password and use current proxy", default=False)
     (options, args) = parser.parse_args()
     
     if len(args)==0 and not os.path.exists("submitted_samples.txt"):
-        logging.error( "You must give either a input file or keep the submitted_samples.txt" )
+        #logging.error( "You must give either a input file or keep the submitted_samples.txt" )
         sys.exit(3)
         
     elif (len(args)==0 and os.path.exists("submitted_samples.txt")):

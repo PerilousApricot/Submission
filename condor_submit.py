@@ -40,17 +40,25 @@ class Task:
         self.frontendstatus="None"
         self.starttime=datetime.datetime.now()
         self.endtime=datetime.datetime.now()
-        self.condorlog=glob.glob(os.path.join(self.run_folder,self.sample)+"/condor*.log")[0]
+        self.allcondorlogs=glob.glob(os.path.join(self.run_folder,self.sample)+"/condor*.log")
+        self.condorlog=self.allcondorlogs[0]
         self.id =int(self.condorlog.split("_")[-1].split(".")[0])
         self.condorfile=os.path.join(self.run_folder,self.sample,"condor.jdl")
         self.jobs=[]
         self.njobs=len(glob.glob(os.path.join(run_folder,sample)+"/run_*.sh"))
         for i in range(self.njobs):
             self.jobs.append(Job(i,self))
+        self.resubmitted=False
+        self.resubmitted_ids=[]
+        for ilog in self.allcondorlogs:
+                self.resubmitted_ids.append(int(ilog.split("_")[-1].split(".")[0]))
+            
+        
     
     def status(self,condor_output):
         condor_output=condor_output.split("\n")
-        this_job_status=filter(lambda x: "%d"%self.id in x,condor_output)
+        
+        this_job_status=filter(lambda x: sum(["%d"%iid in x for iid in self.resubmitted_ids])>0 ,condor_output)
         staus_translate={
         "H":"HOLD",
         "R":"RUNNING",
@@ -72,6 +80,7 @@ class Task:
             tmp=stati.split()
             if len(tmp)>7:
                 comb_id,user,date_subm,time_subm,run_time,status,priority,size_job =tmp[:8]
+                task_id=int(comb_id.split(".")[0])
                 job_id=int(comb_id.split(".")[-1])
                 submitted_time=datetime.datetime(*time.strptime("%d "%(time.localtime().tm_year)+date_subm+" "+time_subm, "%Y %m/%d %H:%M")[:6])
                 days=run_time.split("+")[0]
@@ -83,7 +92,14 @@ class Task:
                 except:
                     log.info(status)
                     log.info(stati)
-                self.jobs[job_id].update(status,"None",submitted_time,runtime)
+                #unchanged id
+                if(task_id==self.id):
+                    self.jobs[job_id].update(status,"None",submitted_time,runtime)
+                else:
+                    for ijob in self.jobs:
+                        if ijob.id==job_id and ijob.task_id==task_id:
+                            self.jobs[ijob.orig_id].update(status,"None",submitted_time,runtime)
+                            
         for i in range(self.njobs):
             #log.info(self.jobs[i].status)
             if self.jobs[i].status=="None" or self.jobs[i].status=="COMPLETED" :
@@ -94,19 +110,22 @@ class Task:
                 
                 start_time=None
                 end_time=None
-                condor_log=open(self.condorlog)
-                condor_log=condor_log.read()
-                condor_log=condor_log.split("\n")
-                this_task=filter(lambda x: "%d"%self.id in x,condor_log)
-                for line in this_task:
-                    #345964.004
-                    if "Job executing on host" in line and "%s.%03d"%(self.id,self.jobs[i].id) in line:
-                        tmp=line.split()
-                        start_time=time.strptime("%d "%(time.localtime().tm_year)+tmp[2]+" "+tmp[3], "%Y %m/%d %H:%M:%S")
-                    elif "Job terminated" in line and "%s.%03d"%(self.id,self.jobs[i].id) in line:
-                        tmp=line.split()
-                        end_time=time.strptime("%d "%(time.localtime().tm_year)+tmp[2]+" "+tmp[3], "%Y %m/%d %H:%M:%S")
-                        break
+                for ilog in self.allcondorlogs:
+                    if "%d"%(self.jobs[i].task_id) not in ilog:
+                        continue
+                    condor_log=open(ilog)
+                    condor_log=condor_log.read()
+                    condor_log=condor_log.split("\n")
+                    this_task=filter(lambda x: "%d"%self.jobs[i].task_id in x,condor_log)
+                    for line in this_task:
+                        #345964.004
+                        if "Job executing on host" in line and "%s.%03d"%(self.jobs[i].task_id,self.jobs[i].id) in line:
+                            tmp=line.split()
+                            start_time=time.strptime("%d "%(time.localtime().tm_year)+tmp[2]+" "+tmp[3], "%Y %m/%d %H:%M:%S")
+                        elif "Job terminated" in line and "%s.%03d"%(self.jobs[i].task_id,self.jobs[i].id) in line:
+                            tmp=line.split()
+                            end_time=time.strptime("%d "%(time.localtime().tm_year)+tmp[2]+" "+tmp[3], "%Y %m/%d %H:%M:%S")
+                            break
                 
                 if start_time is not None and end_time is not None:
                     self.jobs[i].starttime=datetime.datetime(*start_time[:6])
@@ -155,8 +174,14 @@ class Task:
         return jobStatusNumbers
     
     def resubmit(self,tasklist):
+        if(len(tasklist)==0):
+            return
+        if self.resubmitted:
+            log.info("task already resubmitted, close and redo again")
+            return
         condor_jdl_file=open(self.condorfile)
         condor_jdl_resubmit_file=open(self.condorfile.replace(".jdl","_resubmit.jdl"),"w")
+        log.debug(self.condorfile.replace(".jdl","_resubmit.jdl"))
         removed_line=False
         for line in condor_jdl_file:
             if "arguments" in line:
@@ -180,6 +205,15 @@ class Task:
         log.debug(command)
         subprocess.call(command, shell=True)
         os.chdir(cwd)
+        self.allcondorlogs=glob.glob(os.path.join(self.run_folder,self.sample)+"/condor*.log")
+        self.resubmitted_ids=[]
+        for ilog in self.allcondorlogs:
+                self.resubmitted_ids.append(int(ilog.split("_")[-1].split(".")[0]))
+        for i,itask in enumerate(tasklist):
+            self.jobs[itask].update_resubmit(i,self.resubmitted_ids[-1],self)
+        self.resubmitted=True
+        
+
         
     def kill(self,tasklist):
         condor_jdl_file=open(self.condorfile)
@@ -203,15 +237,27 @@ class Task:
 
 class Job:
     """This is represents one actual process on condor"""
-    def __init__(self,_id,job):
+    def __init__(self,_id,task):
         self.status="None"
         self.frontendstatus="None"
         self.id = _id
+        self.orig_id= _id
+        self.task_id=task.id
         self.starttime=datetime.datetime.now()
         self.runtime=datetime.timedelta(0)
         self.endtime=None
-        self.errorfile=os.path.join(job.run_folder,job.sample,"err.%d_%d"%(self.id,job.id))
-        self.outfile=os.path.join(job.run_folder,job.sample,"out.%d_%d"%(self.id,job.id))
+        self.errorfile=os.path.join(task.run_folder,task.sample,"err.%d_%d"%(self.id,self.task_id))
+        self.outfile=os.path.join(task.run_folder,task.sample,"out.%d_%d"%(self.id,self.task_id))
+        self.resubmitted=False
+        if os.path.exists(os.path.join(task.run_folder,task.sample,"resubmitted.txt")):
+            resubmissionFile=open(os.path.join(task.run_folder,task.sample,"resubmitted.txt"),"r")
+            for line in resubmissionFile:
+                if "%d %d ->"%(self.id,task.id) in line:
+                    update=line.split("->")[-1].strip().split(" ")
+                    self.task_id=int(update[0])
+                    self.id=int(update[1])
+                    self.resubmitted=True
+            resubmissionFile.close()
       
     def update(self,_status="None",_frontendstatus="None",_starttime=datetime.datetime.now(),_runtime=datetime.timedelta(0),_endtime=None):
         self.status=_status
@@ -219,6 +265,19 @@ class Job:
         self.starttime=_starttime
         self.runtime=_runtime
         self.endtime=_endtime
+    
+    def update_resubmit(self,job_id,condor_id,task):
+        shutil.move(self.errorfile,self.errorfile+"_resub")
+        shutil.move(self.outfile,self.outfile+"_resub")
+        resubmissionFile=open(os.path.join(task.run_folder,task.sample,"resubmitted.txt"),"w+")
+        resubmissionFile.write("%d %d -> %d %d\n"%(task.id,self.id,job_id,condor_id))
+        resubmissionFile.close()
+        log.info("try to link: ",self.errorfile)
+        log.info(glob.glob(os.path.join(task.run_folder,task.sample)+"\err.*"))
+        self.resubmitted=True
+        
+        os.symlink(os.path.abspath(os.path.join(task.run_folder,task.sample,"err.%d_%d"%(job_id,condor_id))),os.path.abspath(self.errorfile))
+        os.symlink(os.path.abspath(os.path.join(task.run_folder,task.sample,"out.%d_%d"%(job_id,condor_id))),os.path.abspath(self.outfile))
     
     
 
