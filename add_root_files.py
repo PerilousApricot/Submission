@@ -37,6 +37,9 @@ def main():
                              help = 'Folders with this name will be kept  [default = %default]' )
     parser.add_option( '--veto',metavar= 'veto', default = None,
                              help = 'Veto a specific sample e.g. Tau_Run20  [default = %default]' )
+    parser.add_option( '--hadd',metavar= 'hadd', default = "fk",
+                             help = 'hadd options (will be added with a - to the hadd) use like --hadd="fk O" [default = %default]' )
+    
     ( options, args ) = parser.parse_args()
 
     format = '%(levelname)s %(name)s (%(asctime)s): %(message)s'
@@ -52,6 +55,9 @@ def main():
             if "outFolder:" in line:
                 options.inputFolder=line.replace("outFolder:","").strip()
                 break
+    if len(options.hadd.split())>1:
+        options.hadd=" -".join(options.hadd.split(" "))
+    options.hadd=" -"+options.hadd
     print options.output
     megeRootFiles(options)
     
@@ -142,7 +148,7 @@ def megeRootFiles(options):
         shutil.move(outputFolder+"/"+"%s.root"%(os.path.basename(dataSample)),outputFolder+"/"+"Data_%s.root"%(os.path.basename(dataSample)))
     if hasData:
         all_merged_data_files=[outputFolder+"/"+"Data_%s.root "%(os.path.basename(dataSample))  for dataSample in dataSamples]
-        command= "hadd -fk -O "+outputFolder+"/"+"allData.root "+" ".join(all_merged_data_files)
+        command= "hadd %s "%options.hadd+outputFolder+"/"+"allData.root "+" ".join(all_merged_data_files)
         print(command)
         p = subprocess.Popen(command,shell=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
         out, err = p.communicate()
@@ -166,7 +172,7 @@ def hadd(item):
         elif len(samplelist)==0:
             calling='echo "Error no File for %s"'%(sample)
         else:
-            calling="hadd -fk -O "+outputname+" "+" ".join(samplelist)
+            calling="hadd %s "%options.hadd+outputname+" "+" ".join(samplelist)
         #print(calling)
         p = subprocess.Popen(calling,shell=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT )
         out, err = p.communicate()

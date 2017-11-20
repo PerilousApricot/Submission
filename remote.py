@@ -127,9 +127,9 @@ def getFilesfromFile(cfgFile, options):
             sample=re.sub('-pythia8$', '', sample)
             if not os.path.exists("list_Samples/"+sample+".txt"):
                 create_sample_list(sample)
-            file_lists=bins("list_Samples/"+sample+".txt",8000000000)#size in bytes 3GB
+            file_lists=bins("list_Samples/"+sample+".txt",long(options.binsize))#size in bytes 3GB
         else:
-            file_lists=bins("listSampleACCRE/"+sample+".txt",8000000000)#size in bytes 3GB
+            file_lists=bins("listSampleACCRE/"+sample+".txt",long(options.binsize))#size in bytes 3GB
         if len(file_lists)>0:
             cleaned_list=[]
             for binedList in file_lists:
@@ -161,9 +161,12 @@ else
     sed -r -i -e 's/(isData\s+)(1|true)/isData false/' -e 's/(CalculatePUS[a-z]+\s+)(0|false)/CalculatePUSystematics true/' \
 	$CONFIGDIR/Run_info.in
 fi
-
-./Analyzer -in $INPUTFILES -out $OUPUTFILE -C $CONFIGDIR $CONTOLLREGION
-
+"""
+    if len(inputfiles)==1 and options.configdir=="PartDet":
+        exe+="./Analyzer $INPUTFILES $OUPUTFILE\n"
+    else:
+        exe+="./Analyzer -in $INPUTFILES -out $OUPUTFILE -C $CONFIGDIR $CONTOLLREGION\n"
+    exe+="""
 xrdcp -sf $_CONDOR_SCRATCH_DIR/$OUPUTFILE $OUTPUTFOLDER/$SAMPLE/$OUPUTFILE
 rm run.sh
 """
@@ -211,6 +214,8 @@ def main():
                        help= 'Set the debug level. Allowed values: ERROR, WARNING, INFO, DEBUG. [default = %default]' )
     parser.add_option( '--filesFromACCRE', action = 'store_true', default = False,
                        help= 'Use the files from ACCRE [default = %default]' )
+    parser.add_option( '--binsize', default = 8e12,
+                       help= 'Size of the bin packs in byte [default = %default]' )
     parser.add_option( '-t', '--Tag', default = "run_%s_%s_%s_%s"%(date_time.year,
                                                                         date_time.month,
                                                                         date_time.day,
