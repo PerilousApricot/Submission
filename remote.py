@@ -214,7 +214,7 @@ def main():
                        help= 'Set the debug level. Allowed values: ERROR, WARNING, INFO, DEBUG. [default = %default]' )
     parser.add_option( '--filesFromACCRE', action = 'store_true', default = False,
                        help= 'Use the files from ACCRE [default = %default]' )
-    parser.add_option( '--binsize', default = 8e12,
+    parser.add_option( '--binsize', default = 8e9,
                        help= 'Size of the bin packs in byte [default = %default]' )
     parser.add_option( '-t', '--Tag', default = "run_%s_%s_%s_%s"%(date_time.year,
                                                                         date_time.month,

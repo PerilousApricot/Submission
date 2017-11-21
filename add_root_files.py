@@ -39,6 +39,8 @@ def main():
                              help = 'Veto a specific sample e.g. Tau_Run20  [default = %default]' )
     parser.add_option( '--hadd',metavar= 'hadd', default = "fk",
                              help = 'hadd options (will be added with a - to the hadd) use like --hadd="fk O" [default = %default]' )
+    parser.add_option( '--dryrun',action = 'store_true', default = False,
+                             help = 'make a run without executing the hadd [default = %default]' )
     
     ( options, args ) = parser.parse_args()
 
@@ -64,6 +66,13 @@ def main():
     final_merge(options)
     if options.clean:
         cleanUp(options)
+    write_info(options)
+        
+def write_info(options):
+    info_file=open(os.path.join(options.output,"info.txt"),"w")
+    info_file.write("This is the output for the run folder:\n")
+    info_file.write(options.inputFolder+"\n")
+    info_file.close()
 
 def final_merge(options):
     files=glob.glob(options.output+"/tmp/*.root")
@@ -104,7 +113,6 @@ def final_merge(options):
             if not pool._cache: break
     if os.path.exists(options.output+"/tmp/allData.root"):
         shutil.move(options.output+"/tmp/allData.root",options.output+"/allData.root")
-    #shutil.rmtree(options.output+"/tmp")
     
     
 
@@ -136,6 +144,9 @@ def megeRootFiles(options):
         while True:
             time.sleep(5)
             if not pool._cache: break
+    else:
+        log.error("Nothing to do?")
+        exit()
     hasData=False
     dataSamples=[]
     for data in glob.glob(outputFolder+"/"+"*Run*.root"):
@@ -150,10 +161,11 @@ def megeRootFiles(options):
         all_merged_data_files=[outputFolder+"/"+"Data_%s.root "%(os.path.basename(dataSample))  for dataSample in dataSamples]
         command= "hadd %s "%options.hadd+outputFolder+"/"+"allData.root "+" ".join(all_merged_data_files)
         print(command)
-        p = subprocess.Popen(command,shell=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
-        out, err = p.communicate()
-        log.debug(out)
-        log.debug(err)
+        if not options.dryrun:
+            p = subprocess.Popen(command,shell=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+            out, err = p.communicate()
+            log.debug(out)
+            log.debug(err)
     log.info("Done")
 
 
@@ -167,27 +179,34 @@ def hadd(item):
         if len(samplelist)==1:
             if "root:" in samplelist[0]:
                 calling= "xrdcp "+samplelist[0]+" "+outputname
+            elif "eos" in samplelist[0]:
+                calling= "cp "+samplelist[0]+" "+outputname
             else:
                 calling= "mv "+samplelist[0]+" "+outputname
         elif len(samplelist)==0:
             calling='echo "Error no File for %s"'%(sample)
+            print(calling)
         else:
             calling="hadd %s "%options.hadd+outputname+" "+" ".join(samplelist)
         #print(calling)
-        p = subprocess.Popen(calling,shell=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT )
-        out, err = p.communicate()
-        if ("Zomie" in out) or ("Error" in out):
-            
-            print("-------------Problem in-----------------------")
-            print(calling)
-            print("------------------------------------")
-        log.debug(out)
-        log.debug(err)
+        if not options.dryrun:
+            p = subprocess.Popen(calling,shell=True, stdout = subprocess.PIPE, stderr = subprocess.STDOUT )
+            out, err = p.communicate()
+            if ("Zomie" in out) or ("Error" in out):
+                
+                print("-------------Problem in-----------------------")
+                print(calling)
+                print("------------------------------------")
+            log.debug(out)
+            log.debug(err)
+        else:
+            print("This is a dry run and it would have called: "+calling)
         print("%s is finished!"%(outputname))
     return [out, err]
 
 def cleanUp(options):
     log.info('Will delete all input files!!!')
+    shutil.rmtree(options.output+"/tmp")
     shutil.rmtree(options.outputFolder.replace("root://cmseos.fnal.gov/","/eos/uscms/"))
 
 
